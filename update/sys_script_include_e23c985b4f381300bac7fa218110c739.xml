@@ -1,0 +1,279 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>package_private</access>
+        <active>true</active>
+        <api_name>x_psft.SfnNotificationI18nUtil</api_name>
+        <client_callable>false</client_callable>
+        <description/>
+        <name>SfnNotificationI18nUtil</name>
+        <script><![CDATA[function SfnNotificationI18nUtilBase ()
+{
+	gs.print ('\t=> SfnNotificationI18nUtilBase');
+
+	this._initializeMessageStore ();
+	this._initializeQuestionStore ();
+	this._languageId = gs.getProperty ('glide.sys.language');
+
+	gs.print ('\t   SfnNotificationI18nUtilBase =>');
+}
+
+SfnNotificationI18nUtilBase.prototype._initializeMessageStore = function ()
+{
+	gs.print ('');
+	gs.print ('\t\t» Object.prototype.toString.call (this._messageArr): ' + Object.prototype.toString.call (this._messageArr));
+	gs.print ('\t\t» this._messageArr.join (\', \'): ' + this._messageArr.join (', '));
+	gs.print ('\t\t» typeof this._messageArr: ' + typeof this._messageArr);
+	gs.print ('');
+
+	if (typeof this._messageArr === 'undefined') {
+		throw new Error ('You should derive an object that inherits the prototype of ' + this.type + ' and defines instance storage (_messageArr instance member)');
+	} else {
+		this._messageArr = [];
+	}
+};
+
+SfnNotificationI18nUtilBase.prototype._initializeQuestionStore = function ()
+{
+	gs.print ('');
+	gs.print ('\t\t» Object.prototype.toString.call (this._questionArr): ' + Object.prototype.toString.call (this._questionArr));
+	gs.print ('\t\t» this._questionArr.join (\', \'): ' + this._questionArr.join (', '));
+	gs.print ('\t\t» typeof this._questionArr: ' + typeof this._questionArr);
+	gs.print ('');
+
+	if (typeof this._questionArr === 'undefined') {
+		throw new Error ('You should derive an object that inherits the prototype of ' + this.type + ' and defines instance storage (_questionArr instance member)');
+	} else {
+		this._questionArr = [];
+	}
+};
+
+SfnNotificationI18nUtilBase.prototype.addMessage = function (key)
+{
+	if (Object.prototype.toString.call (key) === '[object Array]') {
+		for (var i = 0; i < key.length; i++) {
+			this._messageArr.push ({
+				key: key [i],
+				translatedMessage: ''
+			});
+		}
+	} else {
+		this._messageArr.push ({
+			key: key,
+			translatedMessage: ''
+		});
+	}
+};
+
+SfnNotificationI18nUtilBase.prototype.addQuestionsOfCatalogItem = function (cat_item_id)
+{
+	this._initializeQuestionStore ();
+
+	var question_set = new GlideappVariablePoolQuestionSet ();
+
+	question_set.setRequestID (cat_item_id);
+	question_set.load ();
+
+	var flat_set = question_set.getFlatQuestions ();
+
+	for (var i = 0; i < flat_set.size (); i++) {
+		var question = flat_set.get (i);
+		var question_label = question.getLabel ();
+
+		if (question_label !== '' && question.isVisibleSummary ()) {
+			var question_display_value = question.getDisplayValue ();
+
+			this._questionArr.push ({
+				displayValue: question.displayValue.toString (),
+				id: question.id.toString (),
+				label: question.label.toString (),
+				name: question.name.toString (),
+				translatedLabel: ''
+			});
+		}
+	}
+};
+
+SfnNotificationI18nUtilBase.prototype.getMessage = function (key)
+{
+	for (var i = 0; i < this._messageArr.length; i++) {
+		if (this._messageArr [i].key === key) {
+			if (this._messageArr [i].translatedMessage === '') {
+				return this._messageArr [i].key;
+			} else {
+				return this._messageArr [i].translatedMessage;
+			}
+		}
+	}
+
+	return key;
+};
+
+SfnNotificationI18nUtilBase.prototype.getQuestionLabel = function (name)
+{
+	for (var i = 0; i < this._questionArr.length; i++) {
+		if (this._questionArr [i].name === name) {
+			if (this._questionArr [i].translatedLabel === '') {
+				return this._questionArr [i].label;
+			} else {
+				return this._questionArr [i].translatedLabel;
+			}
+		}
+	}
+
+	return key;
+};
+
+SfnNotificationI18nUtilBase.prototype.setRecipient = function (sys_user_id)
+{
+	var language_id = this._languageId;
+
+	var sys_user_preference_Gr = new GlideRecord ('sys_user_preference');
+
+	sys_user_preference_Gr.addQuery ('user', '=', sys_user_id);
+	sys_user_preference_Gr.addQuery ('name', '=', 'user.language');
+
+	sys_user_preference_Gr.query ();
+
+	if (sys_user_preference_Gr.next ()) {
+		this._languageId = sys_user_preference_Gr.value.toString ();
+	} else {
+		var sys_user_Gr = new GlideRecord ('sys_user');
+
+		if (sys_user_Gr.get (gs.getUserID ())) {
+			if (!sys_user_Gr.u_contact_language.nil ()) {
+				this._languageId = sys_user_Gr.u_contact_language.toString ();
+			} else
+				if (!sys_user_Gr.preferred_language.nil ()) {
+					this._languageId = sys_user_Gr.preferred_language.toString ();
+				}
+		}
+	}
+
+	if (this._languageId !== language_id) {
+		this.translateMessages (false);
+		this.translateQuestions (false);
+	}
+};
+
+SfnNotificationI18nUtilBase.prototype.translateMessages = function (delta)
+{
+	// this could be optimized to store the list of ids requested, than upon the retrieval of the result only look up those ids
+
+	if (typeof delta === 'undefined')
+		delta = true;
+
+	if (this._messageArr.length > 0) {
+		var sys_ui_message_Gr = new GlideRecord ('sys_ui_message');
+		var sys_ui_message_Qc;
+
+		sys_ui_message_Gr.addQuery ('language', '=', this._languageId);
+
+		var c = 0;
+
+		for (var i = 0; i < this._messageArr.length; i++) {
+			if (this._messageArr [i].translatedMessage === '' || delta === false) {
+				if (c === 0) {
+					sys_ui_message_Qc = sys_ui_message_Gr.addQuery ('key', '=', this._messageArr [i].key);
+					gs.print ('\t\t\tsys_ui_message_Qc = sys_ui_message_Gr.addQuery (\'key\', \'=\', \'' + this._messageArr [i].key.replace ('\'', '\\\'') + '\')');
+					c++;
+				} else {
+					sys_ui_message_Qc = sys_ui_message_Qc.addOrCondition ('key', '=', this._messageArr [i].key);
+					gs.print ('\t\t\tsys_ui_message_Qc = sys_ui_message_Qc.addOrCondition (\'key\', \'=\', \'' + this._messageArr [i].key.replace ('\'', '\\\'') + '\')');
+				}
+			}
+		}
+
+		if (c > 0) {
+			sys_ui_message_Gr.query ();
+
+			while (sys_ui_message_Gr.next ()) {
+				var key = sys_ui_message_Gr.key.toString ();
+
+				for (var j = 0; j < this._messageArr.length; j++) {
+					if (this._messageArr [j].key === key) {
+						this._messageArr [j].translatedMessage = sys_ui_message_Gr.message.toString ();
+						break;
+					}
+				}
+			}
+		}
+	}
+};
+
+SfnNotificationI18nUtilBase.prototype.translateQuestions = function (delta)
+{
+	if (typeof delta === 'undefined')
+		delta = true;
+
+	if (this._questionArr.length > 0) {
+		var sys_translated_Gr = new GlideRecord ('sys_translated');
+		var sys_translated_Qc;
+
+		sys_translated_Gr.addQuery ('element', '=', 'question_text');
+		sys_translated_Gr.addQuery ('language', '=', this._languageId);
+		sys_translated_Gr.addQuery ('name', '=', 'question');
+
+		var c = 0;
+
+		for (var i = 0; i < this._questionArr.length; i++) {
+			if (this._questionArr [i].translatedLabel === '' || delta === false) {
+				if (c === 0) {
+					sys_translated_Qc = sys_translated_Gr.addQuery ('value', '=', this._questionArr [i].label);
+					gs.print ('\t\t\tsys_translated_Qc = sys_translated_Gr.addQuery (\'value\', \'=\', \'' + this._questionArr [i].label.replace ('\'', '\\\'') + '\')');
+					c++;
+				} else {
+					sys_translated_Qc = sys_translated_Qc.addOrCondition ('value', '=', this._questionArr [i].label);
+					gs.print ('\t\t\tsys_translated_Qc = sys_translated_Gr.addOrCondition (\'value\', \'=\', \'' + this._questionArr [i].label.replace ('\'', '\\\'') + '\')');
+				}
+			}
+		}
+
+		if (c > 0) {
+			sys_translated_Gr.query ();
+
+			while (sys_translated_Gr.next ()) {
+				var value = sys_translated_Gr.value.toString ();
+
+				for (var j = 0; j < this._questionArr.length; j++) {
+					if (this._questionArr [j].label === value) {
+						this._questionArr [j].translatedLabel = sys_translated_Gr.label.toString ();
+						break;
+					}
+				}
+			}
+		}
+	}
+};
+
+SfnNotificationI18nUtilBase.prototype.type = 'SfnNotificationI18nUtilBase';
+
+function SfnNotificationI18nUtil ()
+{
+	gs.print ('=> SfnNotificationI18nUtil');
+
+	this._messageArr = [];
+	this._questionArr = [];
+
+	gs.print ('   SfnNotificationI18nUtil =>');
+
+	SfnNotificationI18nUtilBase.call (this);
+}
+
+SfnNotificationI18nUtil.prototype = Object.create (SfnNotificationI18nUtilBase.prototype);
+SfnNotificationI18nUtil.prototype.constructor = SfnNotificationI18nUtil;
+]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2018-03-17 09:36:17</sys_created_on>
+        <sys_id>e23c985b4f381300bac7fa218110c739</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>SfnNotificationI18nUtil</sys_name>
+        <sys_package display_value="Application" source="x_psft">a121d78df5344b6b8e623fe034111a11</sys_package>
+        <sys_policy>read</sys_policy>
+        <sys_scope display_value="Application">a121d78df5344b6b8e623fe034111a11</sys_scope>
+        <sys_update_name>sys_script_include_e23c985b4f381300bac7fa218110c739</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2018-03-17 09:36:17</sys_updated_on>
+    </sys_script_include>
+</record_update>
